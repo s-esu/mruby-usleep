@@ -25,20 +25,37 @@
 ** [ MIT license: http://www.opensource.org/licenses/mit-license.php ]
 */
 
-#include <unistd.h>
-#include <sys/time.h>
+#ifdef _WIN32
+  #include <time.h>
+  #include <windows.h>
+  #define usleep(x) Sleep(((x)<1000) ? 1 : ((x)/1000))
+#else
+  #include <unistd.h>
+  #include <sys/time.h>
+#endif
 
 #include "mruby.h"
+
 
 mrb_value
 mrb_f_usleep_usleep(mrb_state *mrb, mrb_value self)
 {
 	mrb_int argc;
 	mrb_value *argv;
+#ifdef _WIN32
+	FILETIME st_ft,ed_ft;
+	unsigned __int64 st_time = 0;
+	unsigned __int64 ed_time = 0;
+#else
 	struct timeval st_tm,ed_tm;
+#endif
 	time_t slp_tm;
 
+#ifdef _WIN32
+	GetSystemTimeAsFileTime(&st_ft);
+#else
 	gettimeofday( &st_tm, NULL );
+#endif
 
 	mrb_get_args(mrb, "*", &argv, &argc);
 
@@ -51,6 +68,18 @@ mrb_f_usleep_usleep(mrb_state *mrb, mrb_value self)
 		mrb_raise(mrb, E_ARGUMENT_ERROR, "wrong number of arguments");
 	}
 
+#ifdef _WIN32
+	GetSystemTimeAsFileTime(&ed_ft);
+
+	st_time |= st_ft.dwHighDateTime;
+	st_time <<=32;
+	st_time |= st_ft.dwLowDateTime;
+	ed_time |= ed_ft.dwHighDateTime;
+	ed_time <<=32;
+	ed_time |= ed_ft.dwLowDateTime;
+
+	slp_tm = (ed_time - st_time) / 10;
+#else
 	gettimeofday( &ed_tm, NULL );
 
 	if ( st_tm.tv_usec > ed_tm.tv_usec ) {
@@ -58,6 +87,7 @@ mrb_f_usleep_usleep(mrb_state *mrb, mrb_value self)
 	} else {
 		slp_tm = ed_tm.tv_usec - st_tm.tv_usec;
 	}
+#endif
 
 	return mrb_fixnum_value(slp_tm);
 }
